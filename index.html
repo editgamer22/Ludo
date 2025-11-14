@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Ludo Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-app-compat.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-firestore-compat.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            background-size: 200% 200%;
+            animation: gradientShift 15s ease infinite;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+
+        /* Dice Styles */
+        .dice-container {
+            perspective: 1000px;
+            width: 100px;
+            height: 100px;
+            margin: 20px auto;
+        }
+
+        .dice {
+            width: 110px;
+            height: 110px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            cursor: pointer;
+            background: linear-gradient(145deg, #ffffff, #f0f0f0);
+            border: 4px solid #667eea;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 55px;
+            box-shadow: 
+                0 10px 30px rgba(102, 126, 234, 0.3),
+                inset 0 -2px 5px rgba(0,0,0,0.1),
+                inset 0 2px 5px rgba(255,255,255,0.8);
+        }
+
+        .dice:hover {
+            transform: scale(1.1) rotateZ(5deg);
+            box-shadow: 
+                0 15px 40px rgba(102, 126, 234, 0.5),
+                inset 0 -2px 5px rgba(0,0,0,0.1),
+                inset 0 2px 5px rgba(255,255,255,0.8);
+            border-color: #764ba2;
+        }
+
+        .dice:active {
+            transform: scale(1.05);
+        }
+
+        .dice.rolling {
+            animation: roll 1s ease-in-out;
+        }
+
+        @keyframes roll {
+            0% { transform: rotateX(0deg) rotateY(0deg); }
+            25% { transform: rotateX(360deg) rotateY(180deg); }
+            50% { transform: rotateX(720deg) rotateY(360deg); }
+            75% { transform: rotateX(1080deg) rotateY(540deg); }
+            100% { transform: rotateX(1440deg) rotateY(720deg); }
+        }
+
+        /* Ludo Board Styles */
+        .game-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .game-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            max-width: 700px;
+            width: 100%;
+        }
+
+        .board-container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .ludo-board {
+            width: 600px;
+            height: 600px;
+            background: white;
+            border: 4px solid #333;
+            border-radius: 10px;
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            grid-template-rows: repeat(15, 1fr);
+            position: relative;
+        }
+
+        @media (max-width: 768px) {
+            .ludo-board {
+                width: 90vw;
+                height: 90vw;
+                max-width: 500px;
+                max-height: 500px;
+            }
+            .board-container {
+                padding: 15px;
+            }
+        }
+
+        .cell {
+            border: 0.5px solid #e0e0e0;
+            position: relative;
+            background: white;
+        }
+
+        /* Home Areas */
+        .home-red { background: #ff6b6b !important; }
+        .home-green { background: #51cf66 !important; }
+        .home-yellow { background: #ffd93d !important; }
+        .home-blue { background: #4dabf7 !important; }
+
+        /* Starting circles in home areas */
+        .home-circle {
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            border: 3px solid white;
+            background: rgba(255, 255, 255, 0.3);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Safe spots */
+        .safe-spot::after {
+            content: "★";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #333;
+            z-index: 1;
+        }
+
+        /* Colored paths */
+        .path-red { background: #ffe0e0 !important; }
+        .path-green { background: #e0ffe0 !important; }
+        .path-yellow { background: #ffffe0 !important; }
+        .path-blue { background: #e0e0ff !important; }
+
+        /* Center triangle paths */
+        .triangle-red { background: #ff6b6b !important; }
+        .triangle-green { background: #51cf66 !important; }
+        .triangle-yellow { background: #ffd93d !important; }
+        .triangle-blue { background: #4dabf7 !important; }
+
+        /* Center home */
+        .center-home {
+            background: linear-gradient(135deg, #ff6b6b 0%, #51cf66 25%, #ffd93d 50%, #4dabf7 75%, #ff6b6b 100%) !important;
+        }
+
+        /* Game Pieces */
+        .piece {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 3px solid #333;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 100;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+        }
+
+        .piece:hover {
+            transform: translate(-50%, -50%) scale(1.15);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.6);
+        }
+
+        .piece.movable {
+            animation: pulse 1s infinite;
+            cursor: pointer;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+        }
+
+        .piece-red { background: #ff0000; }
+        .piece-green { background: #00cc00; }
+        .piece-yellow { background: #ffcc00; }
+        .piece-blue { background: #0066ff; }
+
+        /* Multiple pieces stacking */
+        .piece.stacked-1 { transform: translate(-60%, -60%); }
+        .piece.stacked-2 { transform: translate(-40%, -60%); }
+        .piece.stacked-3 { transform: translate(-60%, -40%); }
+        .piece.stacked-4 { transform: translate(-40%, -40%); }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            padding: 40px;
+            border-radius: 25px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: modalSlideIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            box-shadow: 
+                0 20px 60px rgba(0,0,0,0.3),
+                0 0 0 1px rgba(255,255,255,0.3) inset;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        @keyframes modalSlideIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(-50px) scale(0.9); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0) scale(1); 
+            }
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            font-weight: 600;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+            z-index: -1;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn-primary:active {
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(108, 117, 125, 0.5);
+        }
+
+        .btn-secondary:active {
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.5);
+        }
+
+        .btn-success:active {
+            transform: translateY(-1px);
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .player-config {
+            border: 2px solid #ddd;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+        }
+
+        .scoreboard {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .turn-indicator {
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .player-score {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: #f8f9fa;
+            border-left: 4px solid #ddd;
+        }
+
+        .winner-animation {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 72px;
+            font-weight: bold;
+            color: gold;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+            animation: winnerPulse 1.5s infinite;
+            z-index: 2000;
+            background: rgba(0,0,0,0.8);
+            padding: 40px 60px;
+            border-radius: 20px;
+        }
+
+        @keyframes winnerPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.1); }
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <!-- Welcome Screen -->
+    <div id="welcomeScreen" class="modal fade-in">
+        <div class="modal-content text-center">
+            <h1 class="text-5xl font-bold mb-6 text-purple-600">🎲 Ludo Game 🎲</h1>
+            <p class="text-gray-600 mb-8 text-lg">Experience the classic board game!</p>
+            <button onclick="showLogin()" class="btn btn-primary w-full text-lg">Start Game</button>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="modal hidden">
+        <div class="modal-content">
+            <h2 class="text-3xl font-bold mb-6 text-center">Login to Play</h2>
+            <div class="input-group">
+                <label>Email or Username</label>
+                <input type="text" id="loginInput" placeholder="Enter your email or username">
+            </div>
+            <div class="space-y-3">
+                <button onclick="login()" class="btn btn-primary w-full">Login</button>
+                <button onclick="playAsGuest()" class="btn btn-secondary w-full">Play as Guest</button>
+            </div>
+            <p class="text-sm text-gray-500 mt-4 text-center">No verification required!</p>
+        </div>
+    </div>
+
+    <!-- Configuration Screen -->
+    <div id="configScreen" class="modal hidden">
+        <div class="modal-content">
+            <h2 class="text-3xl font-bold mb-6 text-center">Game Setup</h2>
+            <div class="input-group">
+                <label>Number of Players</label>
+                <select id="numPlayers" onchange="updatePlayerConfig()">
+                    <option value="2">2 Players</option>
+                    <option value="3">3 Players</option>
+                    <option value="4">4 Players</option>
+                </select>
+            </div>
+            <div id="playerConfigs"></div>
+            <button onclick="startGame()" class="btn btn-success w-full mt-4">Start Game</button>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="hidden">
+        <div class="game-wrapper">
+            <div class="game-content">
+                <!-- Current Game Scoreboard -->
+                <div class="scoreboard">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-xl font-bold text-purple-600">Current Game</h3>
+                        <button onclick="showHistory()" class="btn btn-primary" style="padding: 8px 16px; font-size: 14px;">📊 View History</button>
+                    </div>
+                    <div id="turnIndicator" class="turn-indicator"></div>
+                    <div id="scores"></div>
+                    <div class="flex gap-2 mt-4">
+                        <button onclick="resetGame()" class="btn btn-secondary flex-1">New Game</button>
+                    </div>
+                </div>
+
+                <!-- Board -->
+                <div class="board-container">
+                    <div class="ludo-board" id="ludoBoard"></div>
+                    <div class="dice-container">
+                        <div id="dice" class="dice" onclick="rollDice()">🎲</div>
+                    </div>
+                    <div id="diceResult" class="text-center text-2xl font-bold mt-2" style="color: #667eea;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game History Modal -->
+    <div id="historyModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-3xl font-bold text-purple-600">Game History</h2>
+                <button onclick="closeHistory()" class="text-4xl text-gray-500 hover:text-gray-700" style="line-height: 1;">&times;</button>
+            </div>
+            
+            <!-- Filter Tabs -->
+            <div class="flex gap-2 mb-4">
+                <button onclick="filterHistory('all')" id="filterAll" class="btn btn-primary flex-1" style="padding: 10px;">All Games</button>
+                <button onclick="filterHistory('human')" id="filterHuman" class="btn btn-secondary flex-1" style="padding: 10px;">Human vs Human</button>
+                <button onclick="filterHistory('computer')" id="filterComputer" class="btn btn-secondary flex-1" style="padding: 10px;">vs Computer</button>
+            </div>
+
+            <!-- History List -->
+            <div id="historyList" style="max-height: 400px; overflow-y: auto;">
+                <!-- History items will be inserted here -->
+            </div>
+
+            <!-- Clear History Button -->
+            <button onclick="clearHistory()" class="btn btn-secondary w-full mt-4">🗑️ Clear All History</button>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDummy-Key",
+            authDomain: "ludo-game.firebaseapp.com",
+            projectId: "ludo-game"
+        };
+
+        let db = null;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        } catch (error) {
+            console.log("Firebase not configured - using localStorage");
+        }
+
+        // Game State
+        let gameState = {
+            currentPlayer: 0,
+            players: [],
+            diceValue: 0,
+            isRolling: false,
+            gameStarted: false,
+            currentUser: null,
+            canRoll: true,
+            movablePieces: []
+        };
+
+        const COLORS = ['red', 'green', 'yellow', 'blue'];
+        
+        // Board positions - 52 squares around the board
+        const POSITIONS = {
+            red: { start: 1, home: [101, 102, 103, 104, 105, 106], homeBase: [[1,1], [1,4], [4,1], [4,4]] },
+            green: { start: 14, home: [201, 202, 203, 204, 205, 206], homeBase: [[1,10], [1,13], [4,10], [4,13]] },
+            yellow: { start: 27, home: [301, 302, 303, 304, 305, 306], homeBase: [[10,10], [10,13], [13,10], [13,13]] },
+            blue: { start: 40, home: [401, 402, 403, 404, 405, 406], homeBase: [[10,1], [10,4], [13,1], [13,4]] }
+        };
+
+        // Main path coordinates (52 positions going clockwise)
+        const PATH = [
+            [6,1], [6,2], [6,3], [6,4], [6,5],  // Red starting path
+            [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],  // Going up
+            [0,7], [0,8],  // Top turn
+            [1,8], [2,8], [3,8], [4,8], [5,8],  // Green starting path
+            [6,9], [6,10], [6,11], [6,12], [6,13], [6,14],  // Going right
+            [7,14], [8,14],  // Right turn
+            [8,13], [8,12], [8,11], [8,10], [8,9],  // Yellow starting path
+            [9,8], [10,8], [11,8], [12,8], [13,8], [14,8],  // Going down
+            [14,7], [14,6],  // Bottom turn
+            [13,6], [12,6], [11,6], [10,6], [9,6],  // Blue starting path
+            [8,5], [8,4], [8,3], [8,2], [8,1], [8,0],  // Going left
+            [7,0]  // Back to start
+        ];
+
+        // Home paths (colored triangles leading to center)
+        const HOME_PATHS = {
+            red: [[7,1], [7,2], [7,3], [7,4], [7,5], [7,6]],
+            green: [[1,7], [2,7], [3,7], [4,7], [5,7], [6,7]],
+            yellow: [[7,13], [7,12], [7,11], [7,10], [7,9], [7,8]],
+            blue: [[13,7], [12,7], [11,7], [10,7], [9,7], [8,7]]
+        };
+
+        // Safe positions
+        const SAFE_SPOTS = [1, 9, 14, 22, 27, 35, 40, 48];
+
+        // UI Functions
+        function showLogin() {
+            document.getElementById('welcomeScreen').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
+
+        function login() {
+            const input = document.getElementById('loginInput').value.trim();
+            if (input) {
+                gameState.currentUser = input;
+                saveUserToCloud(input);
+                showConfig();
+            } else {
+                alert('Please enter email or username');
+            }
+        }
+
+        function playAsGuest() {
+            gameState.currentUser = 'Guest_' + Date.now();
+            showConfig();
+        }
+
+        function showConfig() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('configScreen').classList.remove('hidden');
+            updatePlayerConfig();
+        }
+
+        function updatePlayerConfig() {
+            const numPlayers = parseInt(document.getElementById('numPlayers').value);
+            const configDiv = document.getElementById('playerConfigs');
+            configDiv.innerHTML = '';
+
+            for (let i = 0; i < numPlayers; i++) {
+                const color = COLORS[i];
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'player-config';
+                playerDiv.style.borderLeftColor = color;
+                playerDiv.style.borderLeftWidth = '5px';
+                playerDiv.innerHTML = `
+                    <h4 class="font-bold mb-3 text-lg">${color.toUpperCase()} Player</h4>
+                    <div class="flex gap-4 mb-3">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="player${i}" value="human" checked onchange="togglePlayerName(${i})">
+                            <span class="ml-2">Human</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="player${i}" value="computer" onchange="togglePlayerName(${i})">
+                            <span class="ml-2">Computer</span>
+                        </label>
+                    </div>
+                    <input type="text" id="playerName${i}" placeholder="Enter name" class="w-full p-2 border-2 rounded">
+                `;
+                configDiv.appendChild(playerDiv);
+            }
+        }
+
+        function togglePlayerName(playerIndex) {
+            const radioValue = document.querySelector(`input[name="player${playerIndex}"]:checked`).value;
+            const nameInput = document.getElementById(`playerName${playerIndex}`);
+            if (radioValue === 'computer') {
+                nameInput.value = `AI Player`;
+                nameInput.disabled = true;
+            } else {
+                nameInput.disabled = false;
+                if (nameInput.value === 'AI Player') {
+                    nameInput.value = '';
+                }
+            }
+        }
+
+        function startGame() {
+            const numPlayers = parseInt(document.getElementById('numPlayers').value);
+            gameState.players = [];
+
+            for (let i = 0; i < numPlayers; i++) {
+                const isComputer = document.querySelector(`input[name="player${i}"]:checked`).value === 'computer';
+                const name = document.getElementById(`playerName${i}`).value || COLORS[i].toUpperCase();
+                
+                gameState.players.push({
+                    id: i,
+                    name: name,
+                    color: COLORS[i],
+                    isComputer: isComputer,
+                    pieces: [0, 0, 0, 0],  // 0 means in home base
+                    finishedPieces: 0,
+                    score: 0
+                });
+            }
+
+            gameState.currentPlayer = 0;
+            gameState.gameStarted = true;
+            gameState.canRoll = true;
+
+            document.getElementById('configScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            
+            initializeBoard();
+            updateUI();
+            
+            // Start computer turn if needed
+            if (gameState.players[0].isComputer) {
+                setTimeout(() => rollDice(), 1500);
+            }
+        }
+
+        function initializeBoard() {
+            const board = document.getElementById('ludoBoard');
+            board.innerHTML = '';
+
+            // Create 15x15 grid
+            for (let row = 0; row < 15; row++) {
+                for (let col = 0; col < 15; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    
+                    // Color home areas (6x6 corners)
+                    if (row < 6 && col < 6) {
+                        cell.classList.add('home-red');
+                        // Add home circles
+                        if ((row === 1 && col === 1) || (row === 1 && col === 4) || 
+                            (row === 4 && col === 1) || (row === 4 && col === 4)) {
+                            const circle = document.createElement('div');
+                            circle.className = 'home-circle';
+                            cell.appendChild(circle);
+                        }
+                    } else if (row < 6 && col > 8) {
+                        cell.classList.add('home-green');
+                        if ((row === 1 && col === 10) || (row === 1 && col === 13) || 
+                            (row === 4 && col === 10) || (row === 4 && col === 13)) {
+                            const circle = document.createElement('div');
+                            circle.className = 'home-circle';
+                            cell.appendChild(circle);
+                        }
+                    } else if (row > 8 && col > 8) {
+                        cell.classList.add('home-yellow');
+                        if ((row === 10 && col === 10) || (row === 10 && col === 13) || 
+                            (row === 13 && col === 10) || (row === 13 && col === 13)) {
+                            const circle = document.createElement('div');
+                            circle.className = 'home-circle';
+                            cell.appendChild(circle);
+                        }
+                    } else if (row > 8 && col < 6) {
+                        cell.classList.add('home-blue');
+                        if ((row === 10 && col === 1) || (row === 10 && col === 4) || 
+                            (row === 13 && col === 1) || (row === 13 && col === 4)) {
+                            const circle = document.createElement('div');
+                            circle.className = 'home-circle';
+                            cell.appendChild(circle);
+                        }
+                    }
+
+                    // Mark main path
+                    if ((row === 6 && (col < 6 || col > 8)) || 
+                        (row === 8 && (col < 6 || col > 8)) ||
+                        (col === 6 && (row < 6 || row > 8)) ||
+                        (col === 8 && (row < 6 || row > 8)) ||
+                        (row === 0 && (col === 6 || col === 7 || col === 8)) ||
+                        (row === 14 && (col === 6 || col === 7 || col === 8)) ||
+                        (col === 0 && (row === 6 || row === 7 || row === 8)) ||
+                        (col === 14 && (row === 6 || row === 7 || row === 8))) {
+                        cell.classList.add('path');
+                    }
+
+                    // Mark home paths (colored triangles)
+                    if (row === 7 && col >= 1 && col <= 6) {
+                        cell.classList.add('triangle-red');
+                    } else if (col === 7 && row >= 1 && row <= 6) {
+                        cell.classList.add('triangle-green');
+                    } else if (row === 7 && col >= 8 && col <= 13) {
+                        cell.classList.add('triangle-yellow');
+                    } else if (col === 7 && row >= 8 && row <= 13) {
+                        cell.classList.add('triangle-blue');
+                    }
+
+                    // Center home
+                    if (row === 7 && col === 7) {
+                        cell.classList.add('center-home');
+                    }
+
+                    // Mark safe spots
+                    const pathIndex = PATH.findIndex(p => p[0] === row && p[1] === col);
+                    if (SAFE_SPOTS.includes(pathIndex)) {
+                        cell.classList.add('safe-spot');
+                    }
+
+                    board.appendChild(cell);
+                }
+            }
+
+            placePieces();
+        }
+
+        function placePieces() {
+            // Remove all existing pieces
+            document.querySelectorAll('.piece').forEach(p => p.remove());
+
+            gameState.players.forEach((player, playerIndex) => {
+                player.pieces.forEach((position, pieceIndex) => {
+                    const piece = document.createElement('div');
+                    piece.className = `piece piece-${player.color}`;
+                    piece.id = `piece-${playerIndex}-${pieceIndex}`;
+                    piece.onclick = () => selectPiece(playerIndex, pieceIndex);
+                    
+                    let targetCell = null;
+
+                    if (position === 0) {
+                        // In home base
+                        const homePos = POSITIONS[player.color].homeBase[pieceIndex];
+                        targetCell = document.querySelector(`[data-row="${homePos[0]}"][data-col="${homePos[1]}"]`);
+                    } else if (position >= 1 && position <= 52) {
+                        // On main path
+                        const startPos = POSITIONS[player.color].start;
+                        const pathIndex = (startPos + position - 2) % 52;
+                        const coords = PATH[pathIndex];
+                        targetCell = document.querySelector(`[data-row="${coords[0]}"][data-col="${coords[1]}"]`);
+                    } else if (position >= 101) {
+                        // In home stretch
+                        const homeIndex = position % 100 - 1;
+                        const coords = HOME_PATHS[player.color][homeIndex];
+                        targetCell = document.querySelector(`[data-row="${coords[0]}"][data-col="${coords[1]}"]`);
+                    }
+
+                    if (targetCell) {
+                        // Check how many pieces already in cell for stacking
+                        const existingPieces = targetCell.querySelectorAll('.piece').length;
+                        if (existingPieces > 0) {
+                            piece.classList.add(`stacked-${existingPieces + 1}`);
+                        }
+                        targetCell.appendChild(piece);
+                    }
+                });
+            });
+        }
+
+        function rollDice() {
+            if (gameState.isRolling || !gameState.gameStarted || !gameState.canRoll) return;
+            
+            gameState.isRolling = true;
+            gameState.canRoll = false;
+            const dice = document.getElementById('dice');
+            dice.classList.add('rolling');
+
+            setTimeout(() => {
+                gameState.diceValue = Math.floor(Math.random() * 6) + 1;
+                dice.classList.remove('rolling');
+                
+                const diceSymbols = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+                dice.textContent = diceSymbols[gameState.diceValue - 1];
+                document.getElementById('diceResult').textContent = `Rolled: ${gameState.diceValue}`;
+                
+                gameState.isRolling = false;
+                
+                // Find movable pieces
+                findMovablePieces();
+                
+                // If no valid moves, next turn
+                if (gameState.movablePieces.length === 0) {
+                    setTimeout(() => {
+                        nextTurn();
+                    }, 1000);
+                } else if (gameState.players[gameState.currentPlayer].isComputer) {
+                    setTimeout(() => makeComputerMove(), 1500);
+                }
+            }, 1000);
+        }
+
+        function findMovablePieces() {
+            const player = gameState.players[gameState.currentPlayer];
+            gameState.movablePieces = [];
+            
+            // Remove previous movable highlights
+            document.querySelectorAll('.piece').forEach(p => p.classList.remove('movable'));
+
+            player.pieces.forEach((position, index) => {
+                if (position === 0 && gameState.diceValue === 6) {
+                    // Can move out
+                    gameState.movablePieces.push(index);
+                } else if (position >= 1 && position <= 52) {
+                    // On main path
+                    if (position + gameState.diceValue <= 52) {
+                        gameState.movablePieces.push(index);
+                    } else {
+                        // Check if entering home stretch
+                        const homePathStart = POSITIONS[player.color].home[0];
+                        const newPos = homePathStart + (position + gameState.diceValue - 53);
+                        if (newPos <= POSITIONS[player.color].home[5]) {
+                            gameState.movablePieces.push(index);
+                        }
+                    }
+                } else if (position >= 101) {
+                    // In home stretch
+                    const homeIndex = position % 100;
+                    if (homeIndex + gameState.diceValue <= 6) {
+                        gameState.movablePieces.push(index);
+                    }
+                }
+            });
+
+            // Highlight movable pieces
+            gameState.movablePieces.forEach(index => {
+                const piece = document.getElementById(`piece-${gameState.currentPlayer}-${index}`);
+                if (piece) piece.classList.add('movable');
+            });
+        }
+
+        function selectPiece(playerIndex, pieceIndex) {
+            if (playerIndex !== gameState.currentPlayer || gameState.diceValue === 0) return;
+            if (!gameState.movablePieces.includes(pieceIndex)) return;
+
+            movePiece(playerIndex, pieceIndex);
+        }
+
+        function movePiece(playerIndex, pieceIndex) {
+            const player = gameState.players[playerIndex];
+            const currentPosition = player.pieces[pieceIndex];
+            let newPosition = 0;
+
+            if (currentPosition === 0 && gameState.diceValue === 6) {
+                // Move out of home
+                newPosition = 1;
+            } else if (currentPosition >= 1 && currentPosition <= 52) {
+                // On main path
+                if (currentPosition + gameState.diceValue <= 52) {
+                    newPosition = currentPosition + gameState.diceValue;
+                } else {
+                    // Enter home stretch
+                    const homePathStart = POSITIONS[player.color].home[0];
+                    newPosition = homePathStart + (currentPosition + gameState.diceValue - 53);
+                }
+            } else if (currentPosition >= 101) {
+                // In home stretch
+                const homeIndex = currentPosition % 100;
+                newPosition = POSITIONS[player.color].home[0] + homeIndex + gameState.diceValue - 1;
+            }
+
+            // Check if piece finished
+            if (newPosition >= 101 && (newPosition % 100) > 6) {
+                player.finishedPieces++;
+                player.score += 100;
+                newPosition = 107;  // Finished marker
+                
+                if (player.finishedPieces === 4) {
+                    setTimeout(() => endGame(player), 500);
+                    return;
+                }
+            }
+
+            player.pieces[pieceIndex] = newPosition;
+            
+            // Check for captures (only on main path, not on safe spots)
+            if (newPosition >= 1 && newPosition <= 52) {
+                checkCapture(playerIndex, newPosition);
+            }
+
+            placePieces();
+            
+            // Next turn logic
+            if (gameState.diceValue === 6) {
+                gameState.canRoll = true;
+                document.getElementById('diceResult').textContent = 'Got 6! Roll again!';
+                
+                if (player.isComputer) {
+                    setTimeout(() => rollDice(), 1500);
+                }
+            } else {
+                setTimeout(() => nextTurn(), 800);
+            }
+            
+            gameState.diceValue = 0;
+            gameState.movablePieces = [];
+            document.querySelectorAll('.piece').forEach(p => p.classList.remove('movable'));
+            updateUI();
+        }
+
+        function checkCapture(playerIndex, position) {
+            const pathIndex = PATH.findIndex((p, i) => {
+                const startPos = POSITIONS[gameState.players[playerIndex].color].start;
+                const calculatedIndex = (startPos + position - 2) % 52;
+                return i === calculatedIndex;
+            });
+
+            if (SAFE_SPOTS.includes(pathIndex)) return;  // Can't capture on safe spot
+
+            gameState.players.forEach((player, pIndex) => {
+                if (pIndex !== playerIndex) {
+                    player.pieces.forEach((piecePos, pieceIdx) => {
+                        if (piecePos === position) {
+                            // Capture!
+                            player.pieces[pieceIdx] = 0;
+                            gameState.players[playerIndex].score += 50;
+                            placePieces();
+                        }
+                    });
+                }
+            });
+        }
+
+        function makeComputerMove() {
+            if (gameState.movablePieces.length === 0) {
+                nextTurn();
+                return;
+            }
+
+            // Simple AI: prefer moving pieces on board, then moving out
+            let bestPiece = gameState.movablePieces[0];
+            const player = gameState.players[gameState.currentPlayer];
+            
+            for (let pieceIndex of gameState.movablePieces) {
+                if (player.pieces[pieceIndex] > 0) {
+                    bestPiece = pieceIndex;
+                    break;
+                }
+            }
+
+            movePiece(gameState.currentPlayer, bestPiece);
+        }
+
+        function nextTurn() {
+            gameState.currentPlayer = (gameState.currentPlayer + 1) % gameState.players.length;
+            gameState.diceValue = 0;
+            gameState.canRoll = true;
+            gameState.movablePieces = [];
+            document.getElementById('diceResult').textContent = '';
+            document.getElementById('dice').textContent = '🎲';
+            
+            updateUI();
+            
+            if (gameState.players[gameState.currentPlayer].isComputer) {
+                setTimeout(() => rollDice(), 1500);
+            }
+        }
+
+        function updateUI() {
+            const currentPlayer = gameState.players[gameState.currentPlayer];
+            const indicator = document.getElementById('turnIndicator');
+            indicator.textContent = `${currentPlayer.name}'s Turn`;
+            indicator.style.background = currentPlayer.color;
+            indicator.style.color = currentPlayer.color === 'yellow' ? '#333' : 'white';
+            
+            const scoresDiv = document.getElementById('scores');
+            scoresDiv.innerHTML = gameState.players.map(player => {
+                const piecesOnBoard = player.pieces.filter(p => p > 0 && p < 100).length;
+                const piecesInHome = player.pieces.filter(p => p === 0).length;
+                const piecesFinished = player.finishedPieces;
+                
+                return `
+                    <div class="player-score" style="border-left-color: ${player.color}; border-left-width: 5px;">
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="font-bold text-lg">${player.name}</div>
+                            <div class="text-xl font-bold" style="color: ${player.color};">${player.score} pts</div>
+                        </div>
+                        <div class="text-sm text-gray-600">
+                            <div>🏠 Home: ${piecesInHome} | 🎯 On Board: ${piecesOnBoard} | ✅ Finished: ${piecesFinished}/4</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function endGame(winner) {
+            gameState.gameStarted = false;
+            
+            const winnerDiv = document.createElement('div');
+            winnerDiv.className = 'winner-animation';
+            winnerDiv.textContent = `🏆 ${winner.name} Wins! 🏆`;
+            document.body.appendChild(winnerDiv);
+            
+            if (gameState.currentUser && db) {
+                saveScoreToCloud(winner);
+            }
+            
+            setTimeout(() => {
+                winnerDiv.remove();
+                if (confirm(`${winner.name} wins with ${winner.score} points!\n\nPlay again?`)) {
+                    resetGame();
+                }
+            }, 3000);
+        }
+
+        function resetGame() {
+            gameState = {
+                currentPlayer: 0,
+                players: [],
+                diceValue: 0,
+                isRolling: false,
+                gameStarted: false,
+                currentUser: gameState.currentUser,
+                canRoll: true,
+                movablePieces: []
+            };
+            
+            document.getElementById('gameScreen').classList.add('hidden');
+            document.getElementById('configScreen').classList.remove('hidden');
+            updatePlayerConfig();
+        }
+
+        async function saveUserToCloud(username) {
+            if (!db) {
+                localStorage.setItem('ludoUser', username);
+                return;
+            }
+            
+            try {
+                await db.collection('users').doc(username).set({
+                    username: username,
+                    lastLogin: new Date()
+                }, { merge: true });
+            } catch (error) {
+                localStorage.setItem('ludoUser', username);
+            }
+        }
+
+        async function saveScoreToCloud(winner) {
+            if (!db) {
+                const scores = JSON.parse(localStorage.getItem('ludoScores') || '[]');
+                scores.push({
+                    winner: winner.name,
+                    score: winner.score,
+                    date: new Date().toISOString()
+                });
+                localStorage.setItem('ludoScores', JSON.stringify(scores));
+                return;
+            }
+            
+            try {
+                await db.collection('scores').add({
+                    user: gameState.currentUser,
+                    winner: winner.name,
+                    score: winner.score,
+                    date: new Date()
+                });
+            } catch (error) {
+                console.error('Error saving score:', error);
+            }
+        }
+
+        // Dual scoring system variables
+        let currentFilter = 'all';
+
+        async function saveScoreToCloud(winner) {
+            // Determine game mode
+            const hasHumanPlayers = gameState.players.filter(p => !p.isComputer).length;
+            const hasComputerPlayers = gameState.players.filter(p => p.isComputer).length;
+            
+            let gameMode = 'human'; // Human vs Human
+            if (hasComputerPlayers > 0 && hasHumanPlayers > 0) {
+                gameMode = 'computer'; // Human vs Computer
+            }
+            
+            const gameData = {
+                user: gameState.currentUser,
+                winner: winner.name,
+                score: winner.score,
+                gameMode: gameMode,
+                players: gameState.players.map(p => ({
+                    name: p.name,
+                    score: p.score,
+                    isComputer: p.isComputer,
+                    color: p.color
+                })),
+                date: new Date().toISOString(),
+                timestamp: Date.now()
+            };
+            
+            if (!db) {
+                const scores = JSON.parse(localStorage.getItem('ludoScores') || '[]');
+                scores.push(gameData);
+                localStorage.setItem('ludoScores', JSON.stringify(scores));
+                return;
+            }
+            
+            try {
+                await db.collection('scores').add(gameData);
+            } catch (error) {
+                console.error('Error saving score:', error);
+                // Fallback to localStorage
+                const scores = JSON.parse(localStorage.getItem('ludoScores') || '[]');
+                scores.push(gameData);
+                localStorage.setItem('ludoScores', JSON.stringify(scores));
+            }
+        }
+
+        function showHistory() {
+            document.getElementById('historyModal').classList.remove('hidden');
+            currentFilter = 'all';
+            loadHistory();
+        }
+
+        function closeHistory() {
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+
+        async function loadHistory() {
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '<p class="text-center text-gray-500">Loading...</p>';
+            
+            let scores = [];
+            
+            if (!db) {
+                scores = JSON.parse(localStorage.getItem('ludoScores') || '[]');
+            } else {
+                try {
+                    const snapshot = await db.collection('scores')
+                        .where('user', '==', gameState.currentUser)
+                        .get();
+                    
+                    scores = snapshot.docs.map(doc => doc.data());
+                } catch (error) {
+                    scores = JSON.parse(localStorage.getItem('ludoScores') || '[]');
+                }
+            }
+            
+            // Filter based on current filter
+            if (currentFilter === 'human') {
+                scores = scores.filter(s => s.gameMode === 'human');
+            } else if (currentFilter === 'computer') {
+                scores = scores.filter(s => s.gameMode === 'computer');
+            }
+            
+            // Sort by timestamp (newest first)
+            scores.sort((a, b) => {
+                const timeA = a.timestamp || new Date(a.date).getTime();
+                const timeB = b.timestamp || new Date(b.date).getTime();
+                return timeB - timeA;
+            });
+            
+            if (scores.length === 0) {
+                historyList.innerHTML = '<p class="text-center text-gray-500 py-8">No games found</p>';
+                return;
+            }
+            
+            historyList.innerHTML = scores.map((game, index) => {
+                const date = new Date(game.date);
+                const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                const modeLabel = game.gameMode === 'human' ? '👥 Human vs Human' : '🤖 vs Computer';
+                const modeColor = game.gameMode === 'human' ? '#28a745' : '#667eea';
+                
+                return `
+                    <div class="player-score mb-3" style="border-left-width: 5px; border-left-color: ${modeColor};">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="font-bold text-lg">🏆 ${game.winner}</div>
+                                <div class="text-sm" style="color: ${modeColor}; font-weight: 600;">${modeLabel}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xl font-bold" style="color: ${modeColor};">${game.score} pts</div>
+                                <div class="text-xs text-gray-500">${formattedDate}</div>
+                            </div>
+                        </div>
+                        ${game.players ? `
+                            <div class="text-sm text-gray-600 mt-2 pt-2 border-t">
+                                <div class="font-semibold mb-1">Final Scores:</div>
+                                ${game.players.map(p => `
+                                    <div class="flex justify-between">
+                                        <span>${p.isComputer ? '🤖' : '👤'} ${p.name}</span>
+                                        <span class="font-semibold">${p.score} pts</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterHistory(mode) {
+            currentFilter = mode;
+            
+            // Update button styles
+            document.getElementById('filterAll').className = 'btn ' + (mode === 'all' ? 'btn-primary' : 'btn-secondary') + ' flex-1';
+            document.getElementById('filterHuman').className = 'btn ' + (mode === 'human' ? 'btn-primary' : 'btn-secondary') + ' flex-1';
+            document.getElementById('filterComputer').className = 'btn ' + (mode === 'computer' ? 'btn-primary' : 'btn-secondary') + ' flex-1';
+            
+            loadHistory();
+        }
+
+        async function clearHistory() {
+            if (!confirm('Clear all game history? This cannot be undone!')) return;
+            
+            if (!db) {
+                localStorage.removeItem('ludoScores');
+                alert('History cleared!');
+                loadHistory();
+                return;
+            }
+            
+            try {
+                const snapshot = await db.collection('scores')
+                    .where('user', '==', gameState.currentUser)
+                    .get();
+                
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+                
+                alert('History cleared!');
+                loadHistory();
+            } catch (error) {
+                localStorage.removeItem('ludoScores');
+                alert('History cleared!');
+                loadHistory();
+            }
+        }
+    </script>
+</body>
+</html>
